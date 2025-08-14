@@ -1,0 +1,35 @@
+# Fichiers de configuration de l'environnement
+.env
+.venv/
+venv/
+env/
+/site-packages/
+
+# Fichiers générés par Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+db.sqlite3
+
+# Fichiers de cache de l'éditeur ou de l'IDE
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Fichiers générés par Django
+/media/
+/static/
+
+# Fichiers de cache de l'application
+.cache/
+celerybeat.pid
+
+# Données de test
+/fixtures/
+
+# Autres fichiers et répertoires ignorés
+*.log
