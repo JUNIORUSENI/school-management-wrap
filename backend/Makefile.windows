@@ -1,0 +1,214 @@
+# Makefile pour le backend Palmarès Imara
+# Usage: make <target>
+# Compatible Windows et Linux/macOS
+
+# Détection du système d'exploitation
+ifeq ($(OS),Windows_NT)
+	DETECTED_OS := Windows
+	VENV_BIN = $(VENV)/Scripts
+	PYTHON_EXT = .exe
+	RM = del /Q
+	RMDIR = rmdir /S /Q
+	COPY = copy
+	MKDIR = if not exist
+	PATH_SEP = \\
+	NULL = nul
+else
+	DETECTED_OS := $(shell uname -s)
+	VENV_BIN = $(VENV)/bin
+	PYTHON_EXT =
+	RM = rm -f
+	RMDIR = rm -rf
+	COPY = cp
+	MKDIR = mkdir -p
+	PATH_SEP = /
+	NULL = /dev/null
+endif
+
+# Variables
+PYTHON = python
+VENV = venv
+VENV_PYTHON = $(VENV_BIN)/python$(PYTHON_EXT)
+VENV_PIP = $(VENV_BIN)/pip$(PYTHON_EXT)
+MANAGE = "$(VENV_PYTHON)" palmaresimara/manage.py
+
+# Couleurs pour l'affichage (fonctionnent sur la plupart des terminaux)
+BLUE = \033[0;34m
+GREEN = \033[0;32m
+YELLOW = \033[0;33m
+RED = \033[0;31m
+NC = \033[0m # No Color
+
+# Détection de la couleur (disable sur certains terminaux)
+ifneq ($(TERM),)
+	ifeq ($(TERM),dumb)
+		BLUE =
+		GREEN =
+		YELLOW =
+		RED =
+		NC =
+	endif
+endif
+
+.PHONY: help install setup migrate test run clean lint format dev-server import-example
+
+# Target par défaut
+help:
+	@echo "$(BLUE)Palmarès Imara Backend - Commandes disponibles:$(NC)"
+	@echo ""
+	@echo "$(GREEN)Setup et installation:$(NC)"
+	@echo "  make install         - Installer les dépendances"
+	@echo "  make setup          - Configuration complète du projet"
+	@echo "  make migrate        - Exécuter les migrations"
+	@echo "  make superuser      - Créer un superutilisateur"
+	@echo ""
+	@echo "$(GREEN)Développement:$(NC)"
+	@echo "  make run            - Démarrer le serveur de développement"
+	@echo "  make dev-server     - Démarrer avec auto-reload"
+	@echo "  make shell          - Ouvrir le shell Django"
+	@echo "  make dbshell        - Ouvrir le shell de base de données"
+	@echo ""
+	@echo "$(GREEN)Tests et qualité:$(NC)"
+	@echo "  make test           - Exécuter tous les tests"
+	@echo "  make test-models    - Tester uniquement les modèles"
+	@echo "  make test-api       - Tester uniquement l'API"
+	@echo "  make test-import    - Tester la commande d'import"
+	@echo "  make coverage       - Tests avec couverture de code"
+	@echo ""
+	@echo "$(GREEN)Import et données:$(NC)"
+	@echo "  make import-example - Créer et importer un fichier Excel d'exemple"
+	@echo ""
+	@echo "$(GREEN)Maintenance:$(NC)"
+	@echo "  make clean          - Nettoyer les fichiers temporaires"
+	@echo "  make reset-db       - Réinitialiser la base de données"
+	@echo "  make collectstatic  - Collecter les fichiers statiques"
+
+# Installation des dépendances
+install:
+	@echo "$(BLUE)Installation des dépendances...$(NC)"
+	$(VENv_PIP) install -r requirements.txt
+	@echo "$(GREEN)✓ Dépendances installées$(NC)"
+
+# Configuration complète du projet
+setup: install
+	@echo "$(BLUE)Configuration du projet...$(NC)"
+	@if not exist ".env" copy ".env.example" ".env"
+	$(MANAGE) makemigrations
+	$(MANAGE) migrate
+	@echo "$(GREEN)✓ Projet configuré$(NC)"
+	@echo "$(YELLOW)N'oubliez pas de créer un superutilisateur avec: make superuser$(NC)"
+
+# Migrations
+migrate:
+	@echo "$(BLUE)Exécution des migrations...$(NC)"
+	$(MANAGE) makemigrations
+	$(MANAGE) migrate
+	@echo "$(GREEN)✓ Migrations terminées$(NC)"
+
+# Créer un superutilisateur
+superuser:
+	@echo "$(BLUE)Création d'un superutilisateur...$(NC)"
+	$(MANAGE) createsuperuser
+
+# Démarrer le serveur de développement
+run:
+	@echo "$(BLUE)Démarrage du serveur de développement...$(NC)"
+	$(MANAGE) runserver
+
+# Serveur avec auto-reload
+dev-server:
+	@echo "$(BLUE)Démarrage du serveur avec auto-reload...$(NC)"
+	$(MANAGE) runserver --settings=palmaresimara.settings
+
+# Shell Django
+shell:
+	$(MANAGE) shell
+
+# Shell de base de données
+dbshell:
+	$(MANAGE) dbshell
+
+# Tests
+test:
+	@echo "$(BLUE)Exécution de tous les tests...$(NC)"
+	$(MANAGE) test students.tests --verbosity=1
+
+test-models:
+	@echo "$(BLUE)Test des modèles...$(NC)"
+	$(MANAGE) test students.tests.test_models --verbosity=2
+
+test-api:
+	@echo "$(BLUE)Test de l'API...$(NC)"
+	$(MANAGE) test students.tests.test_api --verbosity=2
+
+test-import:
+	@echo "$(BLUE)Test de la commande d'import...$(NC)"
+	$(MANAGE) test students.tests.test_import_command --verbosity=2
+
+# Coverage
+coverage:
+	@echo "$(BLUE)Tests avec couverture de code...$(NC)"
+	$(VENV)/Scripts/coverage run --source='palmaresimara' palmaresimara/manage.py test students.tests
+	$(VENV)/Scripts/coverage report
+	$(VENV)/Scripts/coverage html
+	@echo "$(GREEN)✓ Rapport de couverture généré dans htmlcov/$(NC)"
+
+# Import d'exemple
+import-example:
+	@echo "$(BLUE)Création d'un fichier Excel d'exemple...$(NC)"
+	$(VENV)/Scripts/python create_example_excel.py
+	@echo "$(BLUE)Import du fichier d'exemple...$(NC)"
+	$(MANAGE) import_excel example_students.xlsx --dry-run
+	@echo "$(YELLOW)Import en mode simulation terminé. Pour l'import réel: make import-real$(NC)"
+
+import-real:
+	@echo "$(BLUE)Import réel du fichier d'exemple...$(NC)"
+	$(MANAGE) import_excel example_students.xlsx
+	@echo "$(GREEN)✓ Import terminé$(NC)"
+
+# Collecte des fichiers statiques
+collectstatic:
+	@echo "$(BLUE)Collecte des fichiers statiques...$(NC)"
+	$(MANAGE) collectstatic --noinput
+
+# Nettoyage
+clean:
+	@echo "$(BLUE)Nettoyage des fichiers temporaires...$(NC)"
+	@if exist "palmaresimara\\__pycache__" rmdir /s /q "palmaresimara\\__pycache__"
+	@if exist "palmaresimara\\students\\__pycache__" rmdir /s /q "palmaresimara\\students\\__pycache__"
+	@if exist "palmaresimara\\analytics\\__pycache__" rmdir /s /q "palmaresimara\\analytics\\__pycache__"
+	@if exist "palmaresimara\\uploads\\__pycache__" rmdir /s /q "palmaresimara\\uploads\\__pycache__"
+	@if exist "htmlcov" rmdir /s /q "htmlcov"
+	@if exist ".coverage" del ".coverage"
+	@for /r . %%i in (*.pyc) do del "%%i"
+	@echo "$(GREEN)✓ Nettoyage terminé$(NC)"
+
+# Réinitialisation de la base de données
+reset-db:
+	@echo "$(RED)ATTENTION: Cette action va supprimer toutes les données !$(NC)"
+	@echo "$(YELLOW)Appuyez sur Ctrl+C pour annuler, ou Entrée pour continuer...$(NC)"
+	@pause >nul
+	@if exist "palmaresimara\\db.sqlite3" del "palmaresimara\\db.sqlite3"
+	@echo "$(BLUE)Recréation de la base de données...$(NC)"
+	$(MANAGE) migrate
+	@echo "$(GREEN)✓ Base de données réinitialisée$(NC)"
+
+# Affichage de l'état du projet
+status:
+	@echo "$(BLUE)État du projet:$(NC)"
+	@echo ""
+	@echo "$(GREEN)Environnement virtuel:$(NC)"
+	@$(VENV)/Scripts/python --version
+	@echo ""
+	@echo "$(GREEN)Packages installés:$(NC)"
+	@$(PIP) list | findstr -i "django pandas"
+	@echo ""
+	@echo "$(GREEN)Migrations:$(NC)"
+	@$(MANAGE) showmigrations --list
+	@echo ""
+	@echo "$(GREEN)URLs disponibles:$(NC)"
+	@echo "  http://127.0.0.1:8000/api/ - API REST"
+	@echo "  http://127.0.0.1:8000/admin/ - Interface d'administration"
+
+# Lancement rapide pour développement
+dev: setup superuser run

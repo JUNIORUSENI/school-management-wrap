@@ -1,0 +1,41 @@
+version: '3.8'
+
+# Configuration Docker Compose pour le développement
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  # Override pour l'application en développement
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=django-insecure-dev-key-only-for-development
+      - DATABASE_URL=postgresql://palmares_user:palmares_password@db:5432/palmares_imara
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+    volumes:
+      # Montage du code source pour le développement (hot reload)
+      - ./palmaresimara:/app/palmaresimara
+      - ./scripts:/app/scripts
+      - ./logs:/app/logs
+      - media_files:/app/media
+    command: python palmaresimara/manage.py runserver 0.0.0.0:8000
+    
+  # Pas besoin de nginx en développement
+  nginx:
+    profiles: ["production"]
+
+  # Base de données avec port exposé pour debugging
+  db:
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: palmares_imara_dev
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password
+
+volumes:
+  media_files:
+    driver: local

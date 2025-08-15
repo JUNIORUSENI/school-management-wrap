@@ -1,0 +1,188 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: palmares_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11]
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install coverage
+    
+    - name: Set up environment variables
+      run: |
+        echo "SECRET_KEY=django-test-secret-key" >> $GITHUB_ENV
+        echo "DEBUG=True" >> $GITHUB_ENV
+        echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/palmares_test" >> $GITHUB_ENV
+        echo "ALLOWED_HOSTS=localhost,127.0.0.1" >> $GITHUB_ENV
+    
+    - name: Run migrations
+      run: |
+        cd palmaresimara
+        python manage.py migrate
+    
+    - name: Run tests with coverage
+      run: |
+        cd palmaresimara
+        coverage run --source='.' manage.py test students.tests
+        coverage xml
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./palmaresimara/coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.11
+    
+    - name: Install linting dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black isort
+    
+    - name: Run flake8
+      run: |
+        flake8 palmaresimara --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 palmaresimara --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Check code formatting with black
+      run: |
+        black --check palmaresimara
+    
+    - name: Check import sorting with isort
+      run: |
+        isort --check-only palmaresimara
+
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.11
+    
+    - name: Install security scanning dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety bandit
+    
+    - name: Run safety check
+      run: |
+        safety check -r requirements.txt
+    
+    - name: Run bandit security check
+      run: |
+        bandit -r palmaresimara -f json -o bandit-report.json
+      continue-on-error: true
+    
+    - name: Upload bandit report
+      uses: actions/upload-artifact@v3
+      with:
+        name: bandit-report
+        path: bandit-report.json
+
+  build-and-deploy:
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        tags: |
+          ${{ secrets.DOCKER_USERNAME }}/palmares-imara:latest
+          ${{ secrets.DOCKER_USERNAME }}/palmares-imara:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    # Étape de déploiement (à adapter selon votre infrastructure)
+    - name: Deploy to production
+      if: success()
+      run: |
+        echo "Déploiement en production..."
+        # Ajoutez ici vos commandes de déploiement
+        # Par exemple: curl -X POST ${{ secrets.DEPLOY_WEBHOOK_URL }}
+
+  notify:
+    needs: [test, lint, security]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notify on success
+      if: needs.test.result == 'success' && needs.lint.result == 'success'
+      run: |
+        echo "✅ Tous les tests sont passés avec succès!"
+    
+    - name: Notify on failure
+      if: needs.test.result == 'failure' || needs.lint.result == 'failure'
+      run: |
+        echo "❌ Certains tests ont échoué. Vérifiez les logs."

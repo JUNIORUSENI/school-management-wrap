@@ -1,0 +1,48 @@
+# Dockerfile pour le développement - Palmarès Imara Backend
+FROM python:3.11-slim
+
+# Métadonnées
+LABEL maintainer="palmares-imara@example.com"
+LABEL description="Backend Django pour l'application Palmarès Imara - Développement"
+
+# Variables d'environnement pour le développement
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DJANGO_SETTINGS_MODULE=palmaresimara.settings
+
+# Répertoire de travail
+WORKDIR /app
+
+# Installation des dépendances système + outils de développement
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    gcc \
+    python3-dev \
+    libpq-dev \
+    git \
+    curl \
+    vim \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copie et installation des dépendances Python
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Ajout des outils de développement
+RUN pip install --no-cache-dir \
+    ipython \
+    ipdb \
+    django-debug-toolbar \
+    django-extensions \
+    flake8 \
+    black \
+    isort
+
+# Création des répertoires nécessaires
+RUN mkdir -p /app/logs /app/media /app/staticfiles
+
+# Port exposé
+EXPOSE 8000
+
+# Commande par défaut (sera overridée par docker-compose.dev.yml)
+CMD ["python", "palmaresimara/manage.py", "runserver", "0.0.0.0:8000"]

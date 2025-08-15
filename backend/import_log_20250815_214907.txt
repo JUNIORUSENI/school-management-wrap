@@ -1,0 +1,4 @@
+Import effectué le 2025-08-15 21:49:07.102914+00:00
+Étudiants créés: 5
+Inscriptions créées: 5
+Erreurs: 0
